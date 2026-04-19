@@ -8,6 +8,7 @@
 An AI assistant for rental listing analysis that combines:
 - A trained multi-feature rent model exported from ML-LinearRegression
 - A LangChain tool-enabled agent for reasoning over listing details
+- Optional voice output (OpenAI TTS + local audio playback on macOS)
 - CLI workflows for interactive analysis and one-shot prompts
 
 The agent estimates fair monthly rent and compares it against listed rent to classify deals as underpriced, fair, or overpriced.
@@ -20,6 +21,7 @@ The agent estimates fair monthly rent and compares it against listed rent to cla
 - Interactive menu mode and one-shot CLI mode
 - Environment-based configuration (`.env` supported)
 - Runtime model validation with clear error messages
+- Optional spoken responses for recommendations and email-ready alerts
 
 ## Project Architecture
 
@@ -28,13 +30,15 @@ AI-RentePredictionAgent/
 ├── src/
 │   └── agent/
 │       ├── model_runtime.py          # Model loading, validation, prediction, feature contribution helpers
-│       └── rent_prediction_agent.py  # LangChain tool + agent creation + task execution
+│       ├── rent_prediction_agent.py  # LangChain tool + agent creation + task execution (with retry/timeout)
+│       └── voice_output.py           # TTS generation, platform-aware playback, structured logging
 ├── models/
 │   └── rent_model.pkl                # Exported model artifact from ML-LinearRegression
 ├── tests/
 │   ├── test_model_runtime.py         # Unit tests for loading, validation, prediction, explanations
-│   └── test_langchain_tool_agent.py  # Tool invocation test
-├── main.py                           # CLI entrypoint (interactive + one-shot)
+│   ├── test_langchain_tool_agent.py  # Tool invocation test
+│   └── test_voice_output.py          # Mocked tests for TTS, retries, playback fallback
+├── main.py                           # CLI entrypoint (interactive + one-shot, logging config)
 ├── requirements.txt                  # Python dependencies
 ├── .env.example                      # Environment variable template
 └── README.md
@@ -84,18 +88,101 @@ Recommended:
 - `OPENAI_BASE_URL=https://us.api.openai.com/v1`
 
 Optional overrides:
-- `RENT_AGENT_LLM_MODEL` (default: `gpt-4o-mini`)
-- `RENT_AGENT_MODEL_PATH` (default: `models/rent_model.pkl`)
+  - `RENT_AGENT_LLM_MODEL` (default: `gpt-4o-mini`) — LLM model identifier
+  - `RENT_AGENT_MODEL_PATH` (default: `models/rent_model.pkl`) — Path to pickle model file
+  - `RENT_AGENT_VOICE_ENABLED` (default: `false`) — Enable TTS voice output (true/false)
+  - `RENT_AGENT_TTS_VOICE` (default: `nova`) — OpenAI TTS voice name
+  - `RENT_AGENT_REQUEST_TIMEOUT_SECONDS` (default: `45`) — LLM request timeout in seconds
+  - `RENT_AGENT_REQUEST_RETRIES` (default: `2`) — LLM request retry attempts
+  - `RENT_AGENT_TTS_TIMEOUT_SECONDS` (default: `30`) — TTS request timeout in seconds
+  - `RENT_AGENT_TTS_RETRIES` (default: `2`) — TTS request retry attempts
+  - `RENT_AGENT_LOG_LEVEL` (default: `INFO`) — Logging level (DEBUG/INFO/WARNING/ERROR)
 
 Create `.env` in AI-RentePredictionAgent (or copy from `.env.example`):
 
 ```bash
 OPENAI_API_KEY=your_openai_api_key
 OPENAI_BASE_URL=https://us.api.openai.com/v1
+RENT_AGENT_VOICE_ENABLED=false
 # Optional overrides
 # RENT_AGENT_LLM_MODEL=gpt-4o-mini
 # RENT_AGENT_MODEL_PATH=models/rent_model.pkl
+# RENT_AGENT_TTS_VOICE=nova
+# RENT_AGENT_REQUEST_TIMEOUT_SECONDS=45
+# RENT_AGENT_REQUEST_RETRIES=2
+# RENT_AGENT_TTS_TIMEOUT_SECONDS=30
+# RENT_AGENT_TTS_RETRIES=2
+# RENT_AGENT_LOG_LEVEL=INFO
 ```
+
+## Production Hardening
+
+The agent includes production-grade resilience:
+
+### Timeouts and Retries
+
+- **LLM Requests**: Configurable timeout (default 45s) with exponential backoff retry (default 2 retries)
+- **TTS Requests**: Configurable timeout (default 30s) with exponential backoff retry (default 2 retries)
+- Use `RENT_AGENT_REQUEST_TIMEOUT_SECONDS`, `RENT_AGENT_REQUEST_RETRIES`, `RENT_AGENT_TTS_TIMEOUT_SECONDS`, `RENT_AGENT_TTS_RETRIES` to tune
+
+### Structured Logging
+
+- All errors and warnings are logged in structured format: `time=... level=... logger=... message=...`
+- Set `RENT_AGENT_LOG_LEVEL=DEBUG` to see verbose retry and fallback activity
+- Errors are printed to stdout (user-facing) AND logged (operational observability)
+
+### Cross-Platform Audio Playback
+
+- Playback uses platform-aware fallback players:
+  - macOS: `afplay` → `ffplay`
+  - Linux: `ffplay` → `mpg123` → `play`
+  - Other OS: `ffplay`
+- If no player is available, a clear error message guides you to install one
+
+## Voice Agent (Text-to-Speech)
+
+When voice is enabled, the app converts the assistant response to speech and plays it locally.
+
+- Voice runs only when `RENT_AGENT_VOICE_ENABLED=true`.
+- The app uses OpenAI speech generation (TTS model: `tts-1`) and plays audio via platform-specific players.
+- If the response contains a draft-email section, the app also speaks a short follow-up message: "A draft email inquiry is ready to send."
+- Retry logic means transient TTS or playback failures often succeed on the second attempt.
+
+### Enable Voice
+
+In `AI-RentePredictionAgent/.env`:
+
+```bash
+RENT_AGENT_VOICE_ENABLED=true
+# Optional
+# RENT_AGENT_TTS_VOICE=nova
+```
+
+Then run from project root:
+
+```bash
+source .venv/bin/activate
+python main.py
+```
+
+### Voice Quick Test
+
+Use this to verify local audio output first:
+
+```bash
+afplay /System/Library/Sounds/Glass.aiff
+```
+
+Then run an end-to-end app voice test from project root:
+
+```bash
+source .venv/bin/activate
+python main.py --input "Please do a voice test. Respond in exactly one short sentence: Audio test successful."
+```
+
+Expected result:
+- You should hear a short spoken sentence.
+- If something fails, the terminal will print a message starting with `Voice output unavailable:`.
 
 ## Usage
 
@@ -139,7 +226,7 @@ After prediction, the response should:
 
 ## Testing
 
-Run all tests:
+Run all tests (9 tests total):
 
 ```bash
 python -m unittest discover -s tests -p "test_*.py"
@@ -148,12 +235,15 @@ python -m unittest discover -s tests -p "test_*.py"
 Or run individually:
 
 ```bash
-python tests/test_model_runtime.py
-python tests/test_langchain_tool_agent.py
+python tests/test_model_runtime.py          # Model loading, validation, prediction
+python tests/test_langchain_tool_agent.py   # Tool invocation (skipped if model missing)
+python tests/test_voice_output.py           # Voice TTS, retries, playback fallback (mocked)
 ```
 
-Note:
-- `test_langchain_tool_agent.py` skips automatically if model file is missing.
+Notes:
+- `test_voice_output.py` uses mocks — no real OpenAI API calls or audio output during test.
+- `test_langchain_tool_agent.py` is skipped automatically if model file is missing.
+- All tests pass with zero external dependencies or secrets required.
 
 ## Troubleshooting
 
@@ -167,6 +257,13 @@ Note:
 - Error mentioning `incorrect_hostname`
   - Set `OPENAI_BASE_URL=https://us.api.openai.com/v1`.
 
+- No voice/audio is heard
+  - Ensure `RENT_AGENT_VOICE_ENABLED=true` in `.env`.
+  - Run the quick test command in the Voice Quick Test section first.
+  - Verify you run from project root and activate the correct venv: `source .venv/bin/activate`.
+  - Confirm system audio works with: `afplay /System/Library/Sounds/Glass.aiff`.
+  - If playback fails, the app now prints a detailed message starting with: `Voice output unavailable:`.
+
 - Error: model has wrong feature count
   - This agent supports only 5-feature models.
   - Re-export using the multi-feature CSV pipeline.
@@ -179,6 +276,8 @@ Note:
 
 ## Main Components
 
-- Agent entrypoint and CLI: `main.py`
-- LangChain agent + tool: `src/agent/rent_prediction_agent.py`
-- Model runtime and validation: `src/agent/model_runtime.py`
+- **CLI entrypoint and logging**: `main.py` — Interactive menu, one-shot mode, structured logging setup
+- **LangChain agent + tool**: `src/agent/rent_prediction_agent.py` — Agent orchestration with timeout/retry logic
+- **Model runtime and validation**: `src/agent/model_runtime.py` — Model loading, prediction, feature contribution
+- **Voice output and TTS**: `src/agent/voice_output.py` — TTS generation with platform-aware playback, retries, structured logging
+- **Tests**: `tests/test_*.py` — Unit tests with mocks for reproducibility

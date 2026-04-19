@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import logging
 import os
+import time
 from functools import lru_cache
 from pathlib import Path
 
@@ -18,11 +20,44 @@ except ImportError:
 DEFAULT_LOCATION_SCORE = 7.5
 DEFAULT_AMENITIES = 3.0
 DEFAULT_FURNISHED = 0.0
+DEFAULT_REQUEST_TIMEOUT_SECONDS = 45.0
+DEFAULT_REQUEST_RETRIES = 2
+
+
+logger = logging.getLogger(__name__)
 
 
 def _default_model_path() -> Path:
     project_root = Path(__file__).resolve().parents[2]
     return project_root / "models" / "rent_model.pkl"
+
+
+def _request_timeout_seconds() -> float:
+    raw_value = os.getenv("RENT_AGENT_REQUEST_TIMEOUT_SECONDS", str(DEFAULT_REQUEST_TIMEOUT_SECONDS)).strip()
+    try:
+        parsed = float(raw_value)
+        if parsed <= 0:
+            raise ValueError
+        return parsed
+    except ValueError:
+        logger.warning(
+            "Invalid RENT_AGENT_REQUEST_TIMEOUT_SECONDS=%s; using default %.1f",
+            raw_value,
+            DEFAULT_REQUEST_TIMEOUT_SECONDS,
+        )
+        return DEFAULT_REQUEST_TIMEOUT_SECONDS
+
+
+def _request_retries() -> int:
+    raw_value = os.getenv("RENT_AGENT_REQUEST_RETRIES", str(DEFAULT_REQUEST_RETRIES)).strip()
+    try:
+        parsed = int(raw_value)
+        if parsed < 0:
+            raise ValueError
+        return parsed
+    except ValueError:
+        logger.warning("Invalid RENT_AGENT_REQUEST_RETRIES=%s; using default %d", raw_value, DEFAULT_REQUEST_RETRIES)
+        return DEFAULT_REQUEST_RETRIES
 
 
 @lru_cache(maxsize=1)
@@ -67,7 +102,15 @@ def predict_rent_value(
 def build_agent_executor(model_name: str | None = None):
     llm_model = model_name or os.getenv("RENT_AGENT_LLM_MODEL", "gpt-4o-mini")
     openai_base_url = os.getenv("OPENAI_BASE_URL", "https://us.api.openai.com/v1")
-    llm = ChatOpenAI(model=llm_model, temperature=0, base_url=openai_base_url)
+    timeout_seconds = _request_timeout_seconds()
+    retries = _request_retries()
+    llm = ChatOpenAI(
+        model=llm_model,
+        temperature=0,
+        base_url=openai_base_url,
+        timeout=timeout_seconds,
+        max_retries=retries,
+    )
     tools = [predict_rent_value]
 
     system_prompt = """
@@ -92,16 +135,31 @@ After getting tool output:
 
 def run_agent_task(user_input: str, model_name: str | None = None) -> str:
     executor = build_agent_executor(model_name=model_name)
-    response = executor.invoke(
-        {
-            "messages": [
+    retries = _request_retries()
+    last_error: Exception | None = None
+    response = None
+
+    for attempt in range(retries + 1):
+        try:
+            response = executor.invoke(
                 {
-                    "role": "user",
-                    "content": user_input,
+                    "messages": [
+                        {
+                            "role": "user",
+                            "content": user_input,
+                        }
+                    ]
                 }
-            ]
-        }
-    )
+            )
+            break
+        except Exception as error:
+            last_error = error
+            logger.warning("Agent invoke attempt %d/%d failed: %s", attempt + 1, retries + 1, error)
+            if attempt < retries:
+                time.sleep(0.5 * (attempt + 1))
+
+    if response is None:
+        raise RuntimeError(f"Agent request failed after {retries + 1} attempt(s): {last_error}")
 
     messages = response.get("messages", [])
     if messages:

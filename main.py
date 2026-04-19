@@ -1,4 +1,5 @@
 import argparse
+import logging
 import os
 from pathlib import Path
 
@@ -11,6 +12,15 @@ from src.agent.voice_output import speak_response
 def _load_environment() -> None:
     project_root = Path(__file__).resolve().parent
     load_dotenv(project_root / ".env")
+
+
+def _configure_logging() -> None:
+    level_name = os.getenv("RENT_AGENT_LOG_LEVEL", "INFO").upper()
+    level = getattr(logging, level_name, logging.INFO)
+    logging.basicConfig(
+        level=level,
+        format="time=%(asctime)s level=%(levelname)s logger=%(name)s message=%(message)s",
+    )
 
 
 def _validate_runtime_configuration() -> None:
@@ -33,12 +43,24 @@ def _show_configuration() -> None:
     model_name = os.getenv("RENT_AGENT_LLM_MODEL", "gpt-4o-mini")
     model_path = os.getenv("RENT_AGENT_MODEL_PATH", "models/rent_model.pkl")
     openai_base_url = os.getenv("OPENAI_BASE_URL", "https://us.api.openai.com/v1")
+    voice_enabled = os.getenv("RENT_AGENT_VOICE_ENABLED", "false")
+    voice_name = os.getenv("RENT_AGENT_TTS_VOICE", "nova")
+    request_timeout = os.getenv("RENT_AGENT_REQUEST_TIMEOUT_SECONDS", "45")
+    request_retries = os.getenv("RENT_AGENT_REQUEST_RETRIES", "2")
+    tts_timeout = os.getenv("RENT_AGENT_TTS_TIMEOUT_SECONDS", "30")
+    tts_retries = os.getenv("RENT_AGENT_TTS_RETRIES", "2")
 
     print("\nCurrent configuration")
     print(f"- OPENAI_API_KEY set: {'Yes' if api_key_set else 'No'}")
     print(f"- RENT_AGENT_LLM_MODEL: {model_name}")
     print(f"- RENT_AGENT_MODEL_PATH: {model_path}")
     print(f"- OPENAI_BASE_URL: {openai_base_url}")
+    print(f"- RENT_AGENT_VOICE_ENABLED: {voice_enabled}")
+    print(f"- RENT_AGENT_TTS_VOICE: {voice_name}")
+    print(f"- RENT_AGENT_REQUEST_TIMEOUT_SECONDS: {request_timeout}")
+    print(f"- RENT_AGENT_REQUEST_RETRIES: {request_retries}")
+    print(f"- RENT_AGENT_TTS_TIMEOUT_SECONDS: {tts_timeout}")
+    print(f"- RENT_AGENT_TTS_RETRIES: {tts_retries}")
 
 
 def _interactive_menu(model_name_override: str | None = None) -> None:
@@ -85,6 +107,7 @@ def _interactive_menu(model_name_override: str | None = None) -> None:
 
 def main() -> None:
     _load_environment()
+    _configure_logging()
 
     parser = argparse.ArgumentParser(description="LangChain rent assistant")
     parser.add_argument(
