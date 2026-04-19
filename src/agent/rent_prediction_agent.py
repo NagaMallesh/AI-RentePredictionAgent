@@ -84,7 +84,7 @@ After getting tool output:
 1) Explain the fair-rent estimate.
 2) Compare listed price vs estimate.
 3) Say if the listing seems underpriced, fair, or overpriced.
-4) If underpriced, draft a short email inquiry.
+4) If underpriced, output exactly --- DRAFT EMAIL --- on its own line, then write the draft email below it.
 """.strip()
 
     return create_agent(model=llm, tools=tools, system_prompt=system_prompt)
@@ -116,3 +116,38 @@ def run_agent_task(user_input: str, model_name: str | None = None) -> str:
             return str(content)
 
     return str(response)
+
+
+if __name__ == "__main__":
+    import sys
+    from pathlib import Path
+
+    try:
+        from dotenv import load_dotenv
+        load_dotenv(Path(__file__).resolve().parents[2] / ".env")
+    except ImportError:
+        pass
+
+    try:
+        from voice_output import speak_response
+    except ImportError:
+        from .voice_output import speak_response
+
+    print("=" * 64)
+    print("🏠 AI Rent Prediction Agent")
+    print("=" * 64)
+
+    while True:
+        print("\nEnter listing details (or 'exit' to quit):")
+        user_input = input("> ").strip()
+        if user_input.lower() in {"exit", "quit", "q"}:
+            print("Goodbye!")
+            sys.exit(0)
+        if not user_input:
+            continue
+        try:
+            output = run_agent_task(user_input)
+            print(f"\n{output}")
+            speak_response(output)
+        except Exception as error:
+            print(f"\nError: {error}")

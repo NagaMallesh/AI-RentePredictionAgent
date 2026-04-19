@@ -5,6 +5,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 from src.agent.rent_prediction_agent import run_agent_task
+from src.agent.voice_output import speak_response
 
 
 def _load_environment() -> None:
@@ -63,6 +64,7 @@ def _interactive_menu(model_name_override: str | None = None) -> None:
             try:
                 output = run_agent_task(user_input, model_name=model_name_override)
                 print(f"\n{output}")
+                speak_response(output)
             except Exception as error:
                 print(f"\nCould not run agent: {error}")
                 if "incorrect_hostname" in str(error):
@@ -102,6 +104,7 @@ def main() -> None:
     if args.input:
         output = run_agent_task(args.input, model_name=args.model)
         print(output)
+        speak_response(output)
         return
 
     _interactive_menu(model_name_override=args.model)

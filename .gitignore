@@ -50,5 +50,5 @@ models/*.joblib
 
 # Local environment files
 .env
-.env.*
+.env.* 
 !.env.example
