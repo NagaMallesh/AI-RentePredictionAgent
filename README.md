@@ -6,7 +6,7 @@
 ![Model Runtime](https://img.shields.io/badge/Model-Pickle%20Runtime-purple.svg)
 
 An AI assistant for rental listing analysis that combines:
-- A trained multi-feature rent model exported from ML-LinearRegression
+- A trained multi-feature rent model exported from [ML-LinearRegression](https://github.com/naga-maddali/ML-LinearRegression)
 - A LangChain tool-enabled agent for reasoning over listing details
 - Optional voice output (OpenAI TTS + local audio playback on macOS)
 - Hybrid model-first routing to bypass LLM whenever structured input is sufficient
@@ -62,7 +62,7 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-## Export Model Artifact (From ML-LinearRegression)
+## Export Model Artifact (From [ML-LinearRegression](https://github.com/naga-maddali/ML-LinearRegression))
 
 This project expects a 5-feature linear regression model in pickle format.
 
@@ -330,7 +330,7 @@ Notes:
   - Set `OPENAI_API_KEY` in your shell or `.env`.
 
 - Error: `Model file not found`
-  - Export the model from ML-LinearRegression.
+  - Export the model from [ML-LinearRegression](https://github.com/naga-maddali/ML-LinearRegression).
   - Or set `RENT_AGENT_MODEL_PATH` to a valid pickle file.
 
 - Error mentioning `incorrect_hostname`
@@ -349,7 +349,7 @@ Notes:
 
 ## Integration Notes
 
-- Model training and export live in the ML-LinearRegression repository.
+- Model training and export live in the [ML-LinearRegression](https://github.com/naga-maddali/ML-LinearRegression) repository.
 - Inference and conversational analysis live in this repository.
 - This separation lets you retrain independently while keeping agent logic stable.
 
