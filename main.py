@@ -49,6 +49,8 @@ def _show_configuration() -> None:
     request_retries = os.getenv("RENT_AGENT_REQUEST_RETRIES", "2")
     tts_timeout = os.getenv("RENT_AGENT_TTS_TIMEOUT_SECONDS", "30")
     tts_retries = os.getenv("RENT_AGENT_TTS_RETRIES", "2")
+    hybrid_mode = os.getenv("RENT_AGENT_HYBRID_MODE", "true")
+    llm_fallback = os.getenv("RENT_AGENT_LLM_FALLBACK_ENABLED", "true")
 
     print("\nCurrent configuration")
     print(f"- OPENAI_API_KEY set: {'Yes' if api_key_set else 'No'}")
@@ -61,6 +63,8 @@ def _show_configuration() -> None:
     print(f"- RENT_AGENT_REQUEST_RETRIES: {request_retries}")
     print(f"- RENT_AGENT_TTS_TIMEOUT_SECONDS: {tts_timeout}")
     print(f"- RENT_AGENT_TTS_RETRIES: {tts_retries}")
+    print(f"- RENT_AGENT_HYBRID_MODE: {hybrid_mode}")
+    print(f"- RENT_AGENT_LLM_FALLBACK_ENABLED: {llm_fallback}")
 
 
 def _interactive_menu(model_name_override: str | None = None) -> None:
